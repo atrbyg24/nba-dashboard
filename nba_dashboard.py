@@ -122,7 +122,7 @@ st.sidebar.header("Filter Options")
 # Season Year Selector
 # NBA API LeagueDashPlayerStats generally has data from 2000-01 season onwards reliably.
 current_year = pd.Timestamp.now().year
-season_options = list(range(2000, current_year + 1)) # Up to current year for recent seasons
+season_options = list(range(2000, current_year)) # Up to current year for recent seasons
 selected_season_year = st.sidebar.selectbox('Select Season Year', sorted(season_options, reverse=True), index=0) # Default to most recent
 
 # Load the data based on selected season
