@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from nba_api.stats.endpoints import leagueleaders, playercareerstats, commonplayerinfo, commonallplayers
+from nba_api.stats.endpoints import playercareerstats, commonplayerinfo, commonallplayers
 from nba_api.stats.static import players
 
 # --- Configuration ---
