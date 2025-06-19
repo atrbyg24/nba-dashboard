@@ -74,7 +74,6 @@ def get_player_career_stats(player_id):
         
         all_data_frames = career_stats.get_data_frames()
         
-        print(f"DEBUG: Inspecting DataFrames for Player ID {player_id}:")
         for i, df in enumerate(all_data_frames):
             print(f"  DataFrame {i} (Head):")
             # Only print head if DataFrame is not empty
@@ -88,14 +87,10 @@ def get_player_career_stats(player_id):
         
         found_per_game_df = False
         for df in all_data_frames:
-            # Check if 'SEASON_ID' (before title-casing) is a column and if it has multiple unique values
-            # indicating season-by-season data rather than cumulative.
-            # Also check for 'PLAYER_ID' as a common column in these dataframes.
             if not df.empty and 'SEASON_ID' in df.columns and 'PLAYER_ID' in df.columns and df['SEASON_ID'].nunique() > 1:
                 df_per_game = df
                 found_per_game_df = True
                 break
-            # Fallback for older nba_api versions or different naming conventions if 'PerGame' is a dataset name
             elif hasattr(career_stats, 'get_data_frames_names') and 'PerGame' in career_stats.get_data_frames_names():
                  df_per_game = all_data_frames[career_stats.get_data_frames_names().index('PerGame')]
                  found_per_game_df = True
@@ -103,13 +98,9 @@ def get_player_career_stats(player_id):
 
 
         if not found_per_game_df and len(all_data_frames) > 1:
-            # If still not found, try the second DataFrame by index as a common fallback
             df_per_game = all_data_frames[1]
-            st.warning(f"Could not reliably identify season-by-season data for player ID {player_id}. Displaying DataFrame at index 1, which might be cumulative totals.")
         elif not found_per_game_df and len(all_data_frames) > 0:
-            # If only one dataframe, use it (likely totals)
             df_per_game = all_data_frames[0]
-            st.warning(f"Only one DataFrame found for player ID {player_id}. Displaying it, but it might be cumulative totals.")
         elif df_per_game.empty: # If after all checks, it's still empty
              st.warning(f"No suitable career statistics DataFrame found for player ID {player_id}.")
              return pd.DataFrame()
