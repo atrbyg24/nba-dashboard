@@ -1,252 +1,172 @@
-# Import necessary libraries
 import streamlit as st
 import pandas as pd
-import base64
-import time # Import time for rate limiting (though less critical with LeagueDashPlayerStats)
-
-# Import nba_api modules
+from nba_api.stats.endpoints import leagueleaders, playercareerstats, commonplayerinfo
 from nba_api.stats.static import players
-from nba_api.stats.static import teams # To get team names/abbreviations
-from nba_api.stats.endpoints import leaguedashplayerstats
 
-# --- Configuration and Data Loading ---
+# --- Configuration ---
+st.set_page_config(layout="wide", page_title="NBA Stats Dashboard")
 
-# Set page title and favicon
-st.set_page_config(
-    page_title="NBA Player Stats Dashboard",
-    page_icon="🏀",
-    layout="wide", # Use wide layout for better data display
-    initial_sidebar_state="expanded" # Keep sidebar expanded by default
-)
+# --- Helper Functions with Caching ---
 
-# Cache all NBA players static data for quick lookup
 @st.cache_data
-def get_all_nba_players_static():
-    return players.get_active_players()
+def get_all_nba_players():
+    """Fetches a list of all NBA players."""
+    return players.get_players()
 
-# Cache all NBA teams static data for quick lookup
 @st.cache_data
-def get_all_nba_teams_static():
-    return teams.get_teams()
-
-# Function to load NBA player stats data from nba_api using LeagueDashPlayerStats
-@st.cache_data
-def load_data(season_year):
+def get_league_leaders(stat_category):
     """
-    Loads NBA player statistics for a given season from the nba_api.
-    Uses LeagueDashPlayerStats for efficient league-wide data retrieval.
+    Fetches league leaders for a given stat category.
+    :param stat_category: The stat category to retrieve (e.g., 'PTS', 'AST', 'REB').
     """
-    # Get the season ID in "YYYY-YY" format (e.g., "2023-24")
-    target_season_id = f"{season_year}-{str(season_year+1)[-2:]}"
-
-    st.info(f"Fetching NBA player stats for the {target_season_id} season...")
-
     try:
-        # Fetch league-wide player dashboard stats for the specified season
-        # This endpoint provides per-game stats for all players in a season
-        league_stats = leaguedashplayerstats.LeagueDashPlayerStats(
-            season=target_season_id
-            # No need for measure_type_simple='Base' unless we need advanced stats later
-        )
-
-        # Get the first DataFrame from the endpoint results, which is PlayerStats
-        df = league_stats.get_data_frames()[0]
-
-        # Map NBA API column names to dashboard expected names
-        df = df.rename(columns={
-            'PLAYER_NAME': 'Player',
-            'TEAM_ABBREVIATION': 'Team',
-            'PLAYER_AGE': 'Age',
-            'GP': 'Games Played',
-            'PTS': 'Points',
-            'AST': 'Assists',
-            'REB': 'Rebounds',
-            'STL': 'Steals',
-            'BLK': 'Blocks',
-            'PLAYER_ID': 'Player_ID' # Keep player ID for potential future use
-        })
-
-        # The LeagueDashPlayerStats endpoint does not directly provide 'Position'.
-        # We'll map it using the static players data fetched earlier.
-        all_nba_players_static = get_all_nba_players_static()
-
-        # MODIFIED: Explicitly handle None or empty strings for position
-        player_id_to_position = {}
-        for p in all_nba_players_static:
-            pos = p.get('position')
-            # If position is None or an empty string after stripping whitespace, set it to 'N/A'
-            player_id_to_position[p['id']] = pos if pos and pos.strip() != '' else 'N/A'
-
-        df['Position'] = df['Player_ID'].map(player_id_to_position).fillna('N/A')
-
-
-        # Post-processing to ensure correct data types and handle potential missing values
-        numeric_cols = ['Games Played', 'Points', 'Assists', 'Rebounds', 'Steals', 'Blocks', 'Age']
-        for col in numeric_cols:
-            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
-
-        # Ensure Age is integer
-        df['Age'] = df['Age'].astype(int)
-
-        st.success(f"Successfully loaded {len(df)} player stats for the {target_season_id} season!")
+        leaders = leagueleaders.LeagueLeaders(stat_category=stat_category, season='2023-24') # Default to current season
+        df = leaders.get_data_frames()[0]
+        # Rename columns for better readability if necessary
+        df.columns = [col.replace('_', ' ').title() for col in df.columns]
         return df
-
     except Exception as e:
-        st.error(f"Error fetching data from NBA API for season {target_season_id}: {e}")
-        st.warning("Data might not be available for the selected season yet, or there was an issue with the API.")
+        st.error(f"Error fetching league leaders for {stat_category}: {e}")
         return pd.DataFrame() # Return empty DataFrame on error
 
-# --- Helper Function for Download Link ---
-def create_download_link(df_to_download, filename="nba_player_stats.csv"):
+@st.cache_data
+def get_player_career_stats(player_id):
     """
-    Generates a link to download the given DataFrame as a CSV file.
+    Fetches career statistics for a given player ID.
+    :param player_id: The ID of the NBA player.
     """
-    csv = df_to_download.to_csv(index=False).encode('utf-8')
-    b64 = base64.b64encode(csv).decode()  # bytes <-> string
-    href = f'<a href="data:file/csv;base64,{b64}" download="{filename}">Download Data as CSV</a>'
-    return href
+    try:
+        career_stats = playercareerstats.PlayerCareerStats(player_id=player_id)
+        # Regular season totals and per game stats are often in the first two dataframes
+        df_totals = career_stats.get_data_frames()[0]
+        df_per_game = career_stats.get_data_frames()[1]
 
-# --- Streamlit App Layout ---
+        # Combine or select relevant columns. For simplicity, let's just show per game.
+        df_per_game.columns = [col.replace('_', ' ').title() for col in df_per_game.columns]
+        return df_per_game
+    except Exception as e:
+        st.error(f"Error fetching career stats for player ID {player_id}: {e}")
+        return pd.DataFrame() # Return empty DataFrame on error
 
-st.title("🏀 NBA Player Stats Dashboard")
-st.markdown("""
-This dashboard displays key statistics for NBA players.
-The data is fetched from the **unofficial NBA.com API via the `nba_api` Python library**.
-Select a season and use the filters on the sidebar to explore the data.
-""")
+@st.cache_data
+def get_player_info(player_id):
+    """
+    Fetches basic information for a given player ID.
+    :param player_id: The ID of the NBA player.
+    """
+    try:
+        info = commonplayerinfo.CommonPlayerInfo(player_id=player_id)
+        df = info.get_data_frames()[0]
+        return df.iloc[0] # Return the first (and only) row as a Series
+    except Exception as e:
+        st.error(f"Error fetching player info for player ID {player_id}: {e}")
+        return pd.Series() # Return empty Series on error
 
-# --- Sidebar Filters ---
-st.sidebar.header("Filter Options")
+# --- Main Application Logic ---
 
-# Season Year Selector
-# NBA API LeagueDashPlayerStats generally has data from 2000-01 season onwards reliably.
-current_year = pd.Timestamp.now().year
-season_options = list(range(2000, current_year)) # Up to current year for recent seasons
-selected_season_year = st.sidebar.selectbox('Select Season Year', sorted(season_options, reverse=True), index=0) # Default to most recent
+def main():
+    st.title("🏀 NBA Stats Dashboard")
 
-# Load the data based on selected season
-df = load_data(selected_season_year)
+    st.markdown("""
+        Explore NBA player statistics, including league leaders and individual career stats.
+    """)
 
-# Check if DataFrame is empty before trying to access unique values
-if not df.empty:
-    # Team Selection
-    # Ensure 'Team' column exists and handle potential 'N/A' values
-    if 'Team' in df.columns and not df['Team'].empty:
-        sorted_teams = sorted(df['Team'].unique())
-        selected_team = st.sidebar.multiselect('Select Team(s)', sorted_teams, sorted_teams)
-    else:
-        st.sidebar.warning("Team data not available for filtering.")
-        selected_team = [] # Empty list to filter nothing
+    # Sidebar for filters and navigation
+    st.sidebar.header("Navigation & Filters")
+    analysis_type = st.sidebar.radio(
+        "Select Analysis Type:",
+        ("League Leaders", "Player Search")
+    )
 
-    # Position Selection
-    if 'Position' in df.columns and not df['Position'].empty:
-        sorted_positions = sorted(df['Position'].unique())
-        selected_position = st.sidebar.multiselect('Select Position(s)', sorted_positions, sorted_positions)
-    else:
-        st.sidebar.warning("Position data not available for filtering.")
-        selected_position = [] # Empty list to filter nothing
+    if analysis_type == "League Leaders":
+        st.header("🏆 League Leaders (2023-24 Season)")
+        st.write("Displays the top players for selected statistical categories.")
 
-    # Age Slider - Only show if 'Age' column has valid data
-    if 'Age' in df.columns and not df['Age'].isnull().all():
-        min_age_val = int(df['Age'].min())
-        max_age_val = int(df['Age'].max())
-        # Ensure slider range is sensible even if min/max are the same
-        if min_age_val == max_age_val:
-            min_age = max(18, min_age_val - 2)
-            max_age = min_age_val + 2
-        else:
-            min_age = min_age_val
-            max_age = max_age_val
-
-        age_range = st.sidebar.slider(
-            'Filter by Age',
-            min_value=min_age,
-            max_value=max_age,
-            value=(min_age, max_age)
+        stat_categories = {
+            "Points": "PTS",
+            "Assists": "AST",
+            "Rebounds": "REB",
+            "Steals": "STL",
+            "Blocks": "BLK",
+            "Minutes Played": "MIN",
+            "Field Goal Percentage": "FG_PCT",
+            "3-Point Percentage": "FG3_PCT",
+            "Free Throw Percentage": "FT_PCT",
+            "Turnovers": "TOV"
+        }
+        selected_stat_name = st.sidebar.selectbox(
+            "Select Stat Category:",
+            list(stat_categories.keys())
         )
-    else:
-        st.sidebar.info("Age data not fully available from API for filtering players accurately.")
-        age_range = (0, 100) # Set a wide range to not filter anything if age is missing
+        selected_stat_code = stat_categories[selected_stat_name]
 
-    # Points Slider
-    if 'Points' in df.columns and not df['Points'].empty:
-        min_points, max_points = float(df['Points'].min()), float(df['Points'].max())
-        # Ensure slider range is sensible even if min/max are the same
-        if min_points == max_points:
-            min_points = max(0.0, min_points - 5.0)
-            max_points = min_points + 5.0
-        points_range = st.sidebar.slider(
-            'Filter by Points (per game)',
-            min_value=min_points,
-            max_value=max_points,
-            value=(min_points, max_points),
-            step=0.1
-        )
-    else:
-        st.sidebar.warning("Points data not available for filtering.")
-        points_range = (0.0, 100.0) # Wide range
+        leaders_df = get_league_leaders(selected_stat_code)
 
-    # --- Apply Filters ---
-    df_filtered = df.copy() # Start with a copy to avoid modifying the original cached DataFrame
+        if not leaders_df.empty:
+            # Display relevant columns for leaders
+            display_cols = [
+                'Rank', 'Player', 'Team', 'Games Played', 'Min', selected_stat_name.replace(' ', '')
+            ]
+            # Ensure columns exist before trying to display them
+            display_cols = [col for col in display_cols if col in leaders_df.columns]
 
-    if selected_team:
-        df_filtered = df_filtered[df_filtered['Team'].isin(selected_team)]
-    if selected_position:
-        df_filtered = df_filtered[df_filtered['Position'].isin(selected_position)]
-    if 'Age' in df_filtered.columns:
-        df_filtered = df_filtered[
-            (df_filtered['Age'] >= age_range[0]) & (df_filtered['Age'] <= age_range[1])
-        ]
-    if 'Points' in df_filtered.columns:
-        df_filtered = df_filtered[
-            (df_filtered['Points'] >= points_range[0]) & (df_filtered['Points'] <= points_range[1])
-        ]
-
-else:
-    st.warning("Data could not be loaded for the selected season. Please check your internet connection or try a different season.")
-    df_filtered = pd.DataFrame() # Ensure df_filtered is empty if df is empty
-
-# --- Display Data ---
-
-st.subheader("Player Statistics Table")
-
-if df_filtered.empty:
-    st.warning("No players match the selected filters or no data was loaded for the chosen season. Please adjust your selections or try a different season.")
-else:
-    st.dataframe(df_filtered.style.highlight_max(axis=0, subset=['Points', 'Assists', 'Rebounds', 'Steals', 'Blocks']), use_container_width=True)
-
-    # --- Download Filtered Data ---
-    st.markdown("---")
-    st.subheader("Download Data")
-    st.markdown(create_download_link(df_filtered), unsafe_allow_html=True)
-
-    # --- Basic Statistics ---
-    st.markdown("---")
-    st.subheader("Summary Statistics for Filtered Players")
-    st.write(df_filtered.describe())
-
-    # --- Simple Visualizations (Example: Top Scorers) ---
-    st.markdown("---")
-    st.subheader("Top Players by Points")
-
-    if not df_filtered.empty:
-        top_n_max = min(20, len(df_filtered)) # Limit max slider value
-        top_n = st.slider("Show Top N Players", 1, top_n_max, min(10, top_n_max))
-        df_top_scorers = df_filtered.sort_values(by='Points', ascending=False).head(top_n)
-
-        if not df_top_scorers.empty:
-            st.bar_chart(df_top_scorers.set_index('Player')['Points'])
+            st.dataframe(leaders_df[display_cols], use_container_width=True)
         else:
-            st.info("Not enough data to create chart for top players.")
-    else:
-        st.info("No data available to create chart for top players.")
+            st.warning("No data available for league leaders.")
 
-    # --- More detailed visualization (example: scatter plot for Age vs Points) ---
-    st.markdown("---")
-    st.subheader("Age vs. Points (Scatter Plot)")
-    df_plot = df_filtered.dropna(subset=['Age', 'Points'])
+    elif analysis_type == "Player Search":
+        st.header("🔍 Player Career Statistics")
+        st.write("Search for an NBA player to view their career stats.")
 
-    if not df_plot.empty:
-        st.scatter_chart(df_plot, x='Age', y='Points', size='Games Played', color='Team')
-    else:
-        st.info("Not enough valid 'Age' and 'Points' data to create scatter plot.")
+        all_players = get_all_nba_players()
+        player_names = sorted([player['full_name'] for player in all_players])
+
+        selected_player_name = st.sidebar.selectbox(
+            "Search for a Player:",
+            [""] + player_names # Add an empty option
+        )
+
+        if selected_player_name:
+            player_info = next((p for p in all_players if p['full_name'] == selected_player_name), None)
+
+            if player_info:
+                player_id = player_info['id']
+                st.subheader(f"Stats for {selected_player_name}")
+
+                # Display player's general info
+                info_series = get_player_info(player_id)
+                if not info_series.empty:
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.write(f"**Team:** {info_series.get('Team Name', 'N/A')}")
+                        st.write(f"**Position:** {info_series.get('Position', 'N/A')}")
+                        st.write(f"**Height:** {info_series.get('Height', 'N/A')}")
+                    with col2:
+                        st.write(f"**Weight:** {info_series.get('Weight', 'N/A')}")
+                        st.write(f"**Draft:** {info_series.get('Draft Year', 'N/A')} {info_series.get('Draft Round', 'N/A')}. {info_series.get('Draft Number', 'N/A')}.")
+                        st.write(f"**College:** {info_series.get('College', 'N/A')}")
+                    st.markdown("---")
+
+
+                career_df = get_player_career_stats(player_id)
+
+                if not career_df.empty:
+                    # Filter out unnecessary columns if present (e.g., Player ID, Team ID)
+                    cols_to_drop = ['Player Id', 'Team Id', 'League Id'] # Common irrelevant columns
+                    career_df = career_df.drop(columns=[col for col in cols_to_drop if col in career_df.columns], errors='ignore')
+
+                    st.dataframe(career_df, use_container_width=True)
+
+                    # Basic Charting for career average points, rebounds, assists
+                    st.subheader("Career Per Game Averages Over Seasons")
+                    chart_data = career_df[['Season Id', 'Pts', 'Reb', 'Ast']].set_index('Season Id')
+                    st.line_chart(chart_data)
+                else:
+                    st.warning(f"No career statistics available for {selected_player_name}.")
+            else:
+                st.warning("Player not found. Please try a different name.")
+        else:
+            st.info("Select a player from the dropdown to see their career statistics.")
+
+if __name__ == "__main__":
+    main()
