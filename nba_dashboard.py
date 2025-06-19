@@ -45,8 +45,7 @@ def load_data(season_year):
         # Fetch league-wide player dashboard stats for the specified season
         # This endpoint provides per-game stats for all players in a season
         league_stats = leaguedashplayerstats.LeagueDashPlayerStats(
-            season=target_season_id,
-            per_mode_simple='PerGame', # Ensure per game averages
+            season=target_season_id
             # No need for measure_type_simple='Base' unless we need advanced stats later
         )
 
