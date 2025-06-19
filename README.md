@@ -29,19 +29,26 @@ To run this dashboard locally, follow these steps:
 Clone or Download the Project:
 Save the nba_dashboard.py file to your local machine.
 
+Create a requirements.txt file:
+In the same directory as nba_dashboard.py, create a new file named requirements.txt and add the following content to it:
+
+streamlit
+nba_api
+pandas
+
 Create a Virtual Environment (Recommended):
 
 python -m venv nba_env
 source nba_env/bin/activate  # On Windows: .\nba_env\Scripts\activate
 
 Install Dependencies:
-Install all required Python libraries using pip. It's crucial to have the latest versions for nba_api due to potential API changes.
+Install all required Python libraries from the requirements.txt file. This is the most reliable way to ensure all dependencies are met.
 
-pip install --upgrade --no-cache-dir streamlit nba_api pandas
+pip install -r requirements.txt --upgrade --no-cache-dir
 
 🏃 How to Run the Dashboard
 Navigate to the Project Directory:
-Open your terminal or command prompt and change your current directory to where you saved nba_dashboard.py.
+Open your terminal or command prompt and change your current directory to where you saved nba_dashboard.py and requirements.txt.
 
 cd path/to/your/nba_dashboard_project
 
@@ -50,3 +57,7 @@ Run the Streamlit Application:
 streamlit run nba_dashboard.py
 
 This command will open the NBA Stats Dashboard in your default web browser.
+
+💡 Usage
+Use the dropdown to select a player active in the 2024-2025 season. Their career statistics, broken down by season, will be displayed in a table, along with charts visualizing their per-game averages over the years.
+
