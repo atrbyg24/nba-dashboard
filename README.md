@@ -4,9 +4,9 @@
 This is a Streamlit-powered web application designed to provide interactive access to NBA player statistics. Users can explore various statistical categories for league leaders and view detailed career breakdowns for individual players.
 
 ✨ Features
-League Leaders: View the top players in different statistical categories for the 2024-2025 NBA season. (Note: This feature was part of the original request and is included, though it was noted as potentially having issues during development.)
+League Leaders: View the top players in different statistical categories for the NBA season.
 
-Player Search: Search for any NBA player active in the 2024-2025 season.
+Player Search: Search for any NBA player active in the 2023-2024 season.
 
 Detailed Career Stats: For selected players, display their season-by-season statistics in a tabular format.
 
@@ -59,5 +59,5 @@ streamlit run nba_dashboard.py
 This command will open the NBA Stats Dashboard in your default web browser.
 
 💡 Usage
-Use the dropdown to select a player active in the 2024-2025 season. Their career statistics, broken down by season, will be displayed in a table, along with charts visualizing their per-game averages over the years.
+Use the dropdown to select a player active in the season. Their career statistics, broken down by season, will be displayed in a table, along with charts visualizing their per-game averages over the years.
 
